@@ -1,0 +1,34 @@
+# ===== 构建产物（不需要纳入版本管理）=====
+# C# 编译中间目录与输出目录（任意层级）
+[Bb]in/
+[Oo]bj/
+
+# 发布目录：里面是 dotnet publish 生成的 exe，属于构建产物
+publish/
+
+# ===== Visual Studio / Rider / VS Code =====
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.dotCover
+
+# ===== 程序运行时生成的调试文件 =====
+# LyricBar 的调试日志（可能很大，且每次运行都会变）
+debug.log
+# 界面快照与调试开关（仅排查界面问题时临时使用）
+ui-snapshot.png
+debug-ui.txt
+
+# ===== 操作系统杂项 =====
+Thumbs.db
+desktop.ini
+*.tmp
+
+# ===== 打包产物 =====
+*.zip
+*.7z
+*.rar

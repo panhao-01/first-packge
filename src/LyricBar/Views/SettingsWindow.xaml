@@ -1,0 +1,44 @@
+<Window x:Class="LyricBar.Views.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LyricBar 设置" Width="360" Height="280"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="NoResize">
+    <!-- 设置窗口：从上到下依次是字号、歌词偏移、点击穿透、开机自启、保存/取消 -->
+    <StackPanel Margin="20">
+        <!-- 字号：拖动时歌条立即预览变化，点保存才写入配置文件 -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="90"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="50"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="字体大小" VerticalAlignment="Center"/>
+            <Slider x:Name="FontSizeSlider" Grid.Column="1" Minimum="12" Maximum="28"
+                    TickFrequency="1" IsSnapToTickEnabled="True" VerticalAlignment="Center"/>
+            <TextBlock x:Name="FontSizeLabel" Grid.Column="2" Margin="8,0,0,0"
+                       VerticalAlignment="Center" Text="18"/>
+        </Grid>
+
+        <!-- 歌词偏移（毫秒）：正数让歌词延后显示，负数让歌词提前显示 -->
+        <Grid Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="90"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="歌词偏移(ms)" VerticalAlignment="Center"/>
+            <TextBox x:Name="OffsetBox" Grid.Column="1" Text="0"/>
+        </Grid>
+
+        <!-- 点击穿透：开启后鼠标事件穿过歌条，适合不想误触的场景 -->
+        <CheckBox x:Name="ClickThroughCheck" Content="鼠标点击穿透（勾选后歌条不响应鼠标）" Margin="0,14,0,0"/>
+        <!-- 开机自启：写入注册表 HKCU\...\Run -->
+        <CheckBox x:Name="AutoStartCheck" Content="开机自动启动" Margin="0,10,0,0"/>
+
+        <!-- 保存应用全部设置，取消只回滚字号预览 -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button x:Name="SaveButton" Content="保存" Width="72" Padding="0,5" Click="Save_Click"/>
+            <Button Content="取消" Width="72" Margin="10,0,0,0" Padding="0,5" Click="Cancel_Click"/>
+        </StackPanel>
+    </StackPanel>
+</Window>

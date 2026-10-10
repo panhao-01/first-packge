@@ -1,0 +1,18 @@
+# 统一换行符处理，避免不同编辑器/系统反复产生整文件 diff
+* text=auto
+
+# C# / XAML 源码按文本处理
+*.cs        text diff=csharp
+*.xaml      text
+*.csproj    text eol=crlf
+*.sln       text eol=crlf
+*.md        text
+*.json      text
+*.config    text
+
+# 二进制文件不做换行转换
+*.exe       binary
+*.dll       binary
+*.png       binary
+*.ico       binary
+*.pdb       binary

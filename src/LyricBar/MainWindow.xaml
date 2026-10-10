@@ -1,0 +1,108 @@
+<Window x:Class="LyricBar.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LyricBar"
+        Width="720" Height="56"
+        WindowStyle="None" ResizeMode="NoResize"
+        AllowsTransparency="False"
+        Background="#F0202020"
+        Topmost="True"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        Cursor="SizeAll"
+        MouseEnter="Window_MouseEnter"
+        MouseLeave="Window_MouseLeave"
+        MouseLeftButtonDown="Window_MouseLeftButtonDown"
+        MouseMove="Window_MouseMove"
+        MouseLeftButtonUp="Window_MouseLeftButtonUp"
+        MouseWheel="Window_MouseWheel"
+        Loaded="Window_Loaded">
+
+    <!-- 无边框、置顶、不显示在任务栏的歌条窗口 -->
+    <Window.Resources>
+        <!-- 播放控制按钮样式：透明底、鼠标悬停变蓝 -->
+        <Style x:Key="IconButton" TargetType="Button">
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="#DDDDDD"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="Foreground" Value="#4CC2FF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter Property="Foreground" Value="#2E8BC0"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+
+    <!-- 外层容器同时承载横排与竖排两套布局，按停靠边切换显示其一 -->
+    <Grid>
+        <!-- 横向形态：停靠在上/下边缘。左=歌名歌手，中=歌词，右=控制按钮 -->
+        <Grid x:Name="HorizontalRoot" Margin="14,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" VerticalAlignment="Center" MaxWidth="190" Margin="0,0,14,0">
+                <TextBlock x:Name="TitleTextH" Text="等待播放…" Foreground="#EEEEEE" FontSize="13"
+                           TextTrimming="CharacterEllipsis"/>
+                <TextBlock x:Name="ArtistTextH" Text="" Foreground="#999999" FontSize="11"
+                           TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+
+            <TextBlock Grid.Column="1" x:Name="LyricTextH"
+                       Text="在任意播放器中播放音乐，这里会同步显示歌词"
+                       Foreground="#FFFFFF" FontSize="18" TextAlignment="Center"
+                       VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+
+            <StackPanel x:Name="ControlsPanelH" Grid.Column="2" Orientation="Horizontal"
+                        VerticalAlignment="Center" Opacity="0" Margin="14,0,0,0">
+                <Button Style="{StaticResource IconButton}" Content="&#xE892;" Click="Prev_Click" ToolTip="上一首"/>
+                <Button x:Name="PlayPauseButtonH" Style="{StaticResource IconButton}" Content="&#xE768;" Click="PlayPause_Click" ToolTip="播放/暂停"/>
+                <Button Style="{StaticResource IconButton}" Content="&#xE893;" Click="Next_Click" ToolTip="下一首"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- 纵向形态：停靠在左/右边缘。上=控制按钮，中=竖排歌词，下=竖排歌名 -->
+        <Grid x:Name="VerticalRoot" Margin="0,10" Visibility="Collapsed">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <StackPanel x:Name="ControlsPanelV" Grid.Row="0" Orientation="Vertical"
+                        HorizontalAlignment="Center" Opacity="0">
+                <Button Style="{StaticResource IconButton}" Content="&#xE892;" Click="Prev_Click" ToolTip="上一首"/>
+                <Button x:Name="PlayPauseButtonV" Style="{StaticResource IconButton}" Content="&#xE768;" Click="PlayPause_Click" ToolTip="播放/暂停"/>
+                <Button Style="{StaticResource IconButton}" Content="&#xE893;" Click="Next_Click" ToolTip="下一首"/>
+            </StackPanel>
+
+            <!-- 竖排歌词：文本内容在代码里被改成一字一行，实现自上而下阅读 -->
+            <TextBlock Grid.Row="1" x:Name="LyricTextV"
+                       Text="在任意播放器中播放音乐，这里会同步显示歌词"
+                       Foreground="#FFFFFF" FontSize="18" TextAlignment="Center"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+            <TextBlock Grid.Row="2" x:Name="TrackTextV" Text=""
+                       Foreground="#999999" FontSize="11" TextAlignment="Center"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,4,0,0"/>
+        </Grid>
+    </Grid>
+</Window>
