@@ -36,17 +36,30 @@ public sealed class MediaWatcher : IDisposable
     // 情况一：播放器上报的时间轴可信 —— 记录锚点，用本地时钟外推。
     private bool _timelineReliable;
     private double _anchorPosMs;
-    private DateTime _anchorAt = DateTime.Now;
+    /// <summary>锚点对应的播放器上报时刻（不是读取时刻）。</summary>
+    private DateTimeOffset _anchorAt = DateTimeOffset.Now;
 
     // 情况二：播放器不上报时间轴 —— 用「切歌至今经过的时间」重建。
     private DateTime _songStartAt = DateTime.Now;
     private TimeSpan _pausedAccum = TimeSpan.Zero;
     private DateTime? _pausedAt;
     private string? _lastTrackSignature;
+    /// <summary>上一次采纳的播放器样本时刻，用于过滤重复读取的旧样本。</summary>
+    private DateTimeOffset _lastAdoptedUpdated = DateTimeOffset.MinValue;
+    /// <summary>上一次采纳的播放器进度值，配合时间戳判断是否为同一份样本。</summary>
+    private double _lastAdoptedPosMs;
+    /// <summary>检测到切歌的时刻，用于过滤上一首残留的时间轴样本。</summary>
+    private DateTimeOffset _trackChangedAt = DateTimeOffset.MinValue;
 
     // 刚刚发起、但播放器还没确认的播放/暂停状态。
     private bool? _assumedPlaying;
     private DateTime _assumeUntil;
+    /// <summary>
+    /// 是否因为「真实暂停」冻结过锚点。
+    /// 只有这种情况恢复播放时才需要重置锚点时间；
+    /// 程序刚启动或播放器误报状态时不能重置，否则会丢掉样本年龄造成滞后。
+    /// </summary>
+    private bool _pausedAnchorFrozen;
 
     /// <summary>播放器上报的原始进度值，仅用于日志排查。</summary>
     public double LastRawPositionMs { get; private set; }
@@ -74,12 +87,12 @@ public sealed class MediaWatcher : IDisposable
         Attach(PickSession());
 
         // 有些播放器（例如网易云）的 SMTC 事件会晚好几秒才发出来，
-        // 所以自己每 700ms 主动查一次，把切歌和暂停/恢复的响应压到 1 秒内。
+        // 所以自己主动轮询；100ms 用于验证轮询频率对定位延迟的影响。
         _pollTimer = new System.Threading.Timer(
             _ => _ = RefreshAsync(),
             null,
-            TimeSpan.FromMilliseconds(700),
-            TimeSpan.FromMilliseconds(700));
+            TimeSpan.FromMilliseconds(100),
+            TimeSpan.FromMilliseconds(100));
     }
 
     /// <summary>
@@ -95,9 +108,9 @@ public sealed class MediaWatcher : IDisposable
             // 播放器时间轴可信：从锚点开始，用本地时钟向前外推
             if (_timelineReliable)
             {
-                var pos = _anchorPosMs;
-                if (IsPlaying) pos += (DateTime.Now - _anchorAt).TotalMilliseconds;
-                return Math.Max(0, pos);
+                // 用「上报进度 + (现在 - 上报时刻)」换算，补偿播放器上报间隔造成的滞后
+                return Math.Max(0, PlaybackClock.Compute(
+                    _anchorPosMs, _anchorAt, DateTimeOffset.Now, IsPlaying));
             }
 
             // 无可用时间轴：用本地时钟重建（切歌归零、暂停冻结）
@@ -163,6 +176,8 @@ public sealed class MediaWatcher : IDisposable
     /// <summary>更新播放状态，同时维护「暂停累计时长」以保证进度计算正确。</summary>
     private void SetPlayState(bool playing)
     {
+        var wasPlaying = IsPlaying;
+
         if (playing)
         {
             // 从暂停恢复：把这段暂停时间累加到「已暂停时长」里
@@ -171,12 +186,33 @@ public sealed class MediaWatcher : IDisposable
                 _pausedAccum += DateTime.Now - paused;
                 _pausedAt = null;
             }
+
+            // 只有从「真实暂停」恢复时，才从冻结位置重新开始计时，
+            // 避免把暂停时长算进去。启动时的状态切换不能走这里。
+            if (!wasPlaying && _timelineReliable && _pausedAnchorFrozen)
+            {
+                _anchorAt = DateTimeOffset.Now;
+                _pausedAnchorFrozen = false;
+            }
         }
         else
         {
             // 首次进入暂停：记下暂停开始的时刻
             _pausedAt ??= DateTime.Now;
+
+            // 关键修复：暂停瞬间把「当前换算进度」固化为锚点。
+            // 不固化的话会退回播放器上一次上报的旧值，歌词回跳一句。
+            if (wasPlaying && _timelineReliable)
+            {
+                var now = DateTimeOffset.Now;
+                var frozen = PlaybackClock.FreezeOnPause(_anchorPosMs, _anchorAt, now);
+                _anchorPosMs = frozen;
+                _anchorAt = now;
+                _pausedAnchorFrozen = true;
+                Logger.Info($"pause: frozen at {frozen:F0}ms (last report {LastRawPositionMs:F0}ms)");
+            }
         }
+
         IsPlaying = playing;
     }
 
@@ -249,11 +285,15 @@ public sealed class MediaWatcher : IDisposable
     private void ResetClock()
     {
         _songStartAt = DateTime.Now;
-        _anchorAt = DateTime.Now;
+        _anchorAt = DateTimeOffset.Now;
         _anchorPosMs = 0;
         _pausedAccum = TimeSpan.Zero;
         _pausedAt = null;
         _timelineReliable = false;
+        _lastAdoptedUpdated = DateTimeOffset.MinValue;
+        _lastAdoptedPosMs = 0;
+        _pausedAnchorFrozen = false;
+        _trackChangedAt = DateTimeOffset.MinValue;
     }
 
     /// <summary>播放器上报时间轴变化时，刷新锚点。</summary>
@@ -277,11 +317,29 @@ public sealed class MediaWatcher : IDisposable
     /// </summary>
     private void TryAdoptReportedTimeline(double reportedMs, DateTimeOffset updated)
     {
-        if (updated.Year < 2000) return;                        // 时间戳不合理
+        if (updated.Year < 2000) return;                        // 1601 之类的假时间戳
         if (reportedMs < 0 || reportedMs > 21_600_000) return;  // 进度超出 0~6 小时
+
+        // 时间戳必须落在合理范围内，否则宁可保留旧锚点，避免算出离谱进度
+        var age = DateTimeOffset.Now - updated;
+        if (age < TimeSpan.FromSeconds(-5) || age > PlaybackClock.MaxSampleAge) return;
+
+        // 切歌后播放器可能还会短暂上报上一首的旧时间轴，必须丢弃
+        if (PlaybackClock.IsStaleAfterTrackChange(updated, _trackChangedAt, TimeSpan.FromSeconds(1.5))) return;
+
+        // 只有「时间戳和进度都没变」才算重复样本。
+        // 同一时刻内拖动进度条时进度会明显变化，必须立即采纳。
+        if (PlaybackClock.IsDuplicateSample(updated, reportedMs, _lastAdoptedUpdated, _lastAdoptedPosMs)) return;
+
+        _lastAdoptedPosMs = reportedMs;
+        _lastAdoptedUpdated = updated;
         _timelineReliable = true;
         _anchorPosMs = reportedMs;
-        _anchorAt = DateTime.Now;
+        _anchorAt = updated; // 关键：锚定播放器上报时刻，而不是我读取它的时刻
+
+        // 记录每次采纳的新样本，便于量测「拖动到定位」的真实延迟
+        Logger.Info($"timeline adopt: pos={reportedMs:F0} upd={updated:HH:mm:ss.fff} " +
+                    $"age={(DateTimeOffset.Now - updated).TotalMilliseconds:F0}ms");
     }
 
     /// <summary>
@@ -311,6 +369,8 @@ public sealed class MediaWatcher : IDisposable
             {
                 _lastTrackSignature = signature;
                 ResetClock();
+                // 记录切歌时刻；比这更早的时间轴样本属于上一首，不能采纳
+                _trackChangedAt = DateTimeOffset.Now;
             }
 
             LastRawPositionMs = tl.Position.TotalMilliseconds;

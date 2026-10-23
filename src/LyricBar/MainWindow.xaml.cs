@@ -208,6 +208,7 @@ public partial class MainWindow : Window
                         $"lines={_lines.Count} playing={_watcher.IsPlaying} " +
                         $"mode={(_watcher.UsesPlayerTimeline ? "player" : "clock")} " +
                         $"rawPos={_watcher.LastRawPositionMs:F0} " +
+                        $"rawAge={(DateTimeOffset.Now - _watcher.LastRawUpdated).TotalMilliseconds:F0}ms " +
                         $"rawUpd={_watcher.LastRawUpdated:yyyy-MM-dd HH:mm:ss} " +
                         $"lyric='{LyricTextH.Text}'");
         }
